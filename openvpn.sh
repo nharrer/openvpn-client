@@ -57,6 +57,7 @@ firewall() { local port="${1:-1194}" docker_network="$(ip -o addr show dev eth0|
         port="$(awk '/^remote / && NF ~ /^[0-9]*$/ {print $NF}' $conf |
                     grep ^ || echo 1194)"
 
+    echo firewall: $port
     ip6tables -F 2>/dev/null
     ip6tables -X 2>/dev/null
     ip6tables -P INPUT DROP 2>/dev/null
@@ -66,20 +67,20 @@ firewall() { local port="${1:-1194}" docker_network="$(ip -o addr show dev eth0|
                 2>/dev/null
     ip6tables -A INPUT -p icmp -j ACCEPT 2>/dev/null
     ip6tables -A INPUT -i lo -j ACCEPT 2>/dev/null
-    ip6tables -A INPUT -s ${docker6_network} -j ACCEPT 2>/dev/null
-    ip6tables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT \
+    #ip6tables -A INPUT -s ${docker6_network} -j ACCEPT 2>/dev/null
+    #ip6tables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT \
                 2>/dev/null
-    ip6tables -A FORWARD -p icmp -j ACCEPT 2>/dev/null
-    ip6tables -A FORWARD -i lo -j ACCEPT 2>/dev/null
-    ip6tables -A FORWARD -d ${docker6_network} -j ACCEPT 2>/dev/null
-    ip6tables -A FORWARD -s ${docker6_network} -j ACCEPT 2>/dev/null
+    #ip6tables -A FORWARD -p icmp -j ACCEPT 2>/dev/null
+    #ip6tables -A FORWARD -i lo -j ACCEPT 2>/dev/null
+    #ip6tables -A FORWARD -d ${docker6_network} -j ACCEPT 2>/dev/null
+    #ip6tables -A FORWARD -s ${docker6_network} -j ACCEPT 2>/dev/null
     ip6tables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT \
                 2>/dev/null
     ip6tables -A OUTPUT -o lo -j ACCEPT 2>/dev/null
     ip6tables -A OUTPUT -o tap+ -j ACCEPT 2>/dev/null
     ip6tables -A OUTPUT -o tun+ -j ACCEPT 2>/dev/null
-    ip6tables -A OUTPUT -d ${docker6_network} -j ACCEPT 2>/dev/null
-    ip6tables -A OUTPUT -p udp -m udp --dport 53 -j ACCEPT 2>/dev/null
+    #ip6tables -A OUTPUT -d ${docker6_network} -j ACCEPT 2>/dev/null
+    ip6tables -A OUTPUT -o tun+ -p udp -m udp --dport 53 -j ACCEPT 2>/dev/null
     ip6tables -A OUTPUT -p tcp -m owner --gid-owner vpn -j ACCEPT 2>/dev/null &&
     ip6tables -A OUTPUT -p udp -m owner --gid-owner vpn -j ACCEPT 2>/dev/null||{
         ip6tables -A OUTPUT -p tcp -m tcp --dport $port -j ACCEPT 2>/dev/null
@@ -91,23 +92,24 @@ firewall() { local port="${1:-1194}" docker_network="$(ip -o addr show dev eth0|
     iptables -P OUTPUT DROP
     iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
     iptables -A INPUT -i lo -j ACCEPT
-    iptables -A INPUT -s ${docker_network} -j ACCEPT
-    iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    iptables -A FORWARD -i lo -j ACCEPT
-    iptables -A FORWARD -d ${docker_network} -j ACCEPT
-    iptables -A FORWARD -s ${docker_network} -j ACCEPT
+    #iptables -A INPUT -s ${docker_network} -j ACCEPT
+    #iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    #iptables -A FORWARD -i lo -j ACCEPT
+    #iptables -A FORWARD -d ${docker_network} -j ACCEPT
+    #iptables -A FORWARD -s ${docker_network} -j ACCEPT
     iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    iptables -A OUTPUT -o lo ! -d 127.0.0.1 -j DROP
     iptables -A OUTPUT -o lo -j ACCEPT
     iptables -A OUTPUT -o tap+ -j ACCEPT
     iptables -A OUTPUT -o tun+ -j ACCEPT
-    iptables -A OUTPUT -d ${docker_network} -j ACCEPT
-    iptables -A OUTPUT -p udp -m udp --dport 53 -j ACCEPT
+    #iptables -A OUTPUT -d ${docker_network} -j ACCEPT
+    iptables -A OUTPUT -o tun+ -p udp -m udp --dport 53 -j ACCEPT
     iptables -A OUTPUT -p tcp -m owner --gid-owner vpn -j ACCEPT 2>/dev/null &&
     iptables -A OUTPUT -p udp -m owner --gid-owner vpn -j ACCEPT || {
         iptables -A OUTPUT -p tcp -m tcp --dport $port -j ACCEPT
         iptables -A OUTPUT -p udp -m udp --dport $port -j ACCEPT; }
-    iptables -t nat -A POSTROUTING -o tap+ -j MASQUERADE
-    iptables -t nat -A POSTROUTING -o tun+ -j MASQUERADE
+    #iptables -t nat -A POSTROUTING -o tap+ -j MASQUERADE
+    #iptables -t nat -A POSTROUTING -o tun+ -j MASQUERADE
     [[ -s $route6 ]] && for net in $(cat $route6); do return_route6 $net; done
     [[ -s $route ]] && for net in $(cat $route); do return_route $net; done
 }
@@ -121,8 +123,8 @@ return_route6() { local network="$1" gw="$(ip -6 route |
     ip -6 route | grep -q "$network" ||
         ip -6 route add to $network via $gw dev eth0
     ip6tables -A INPUT -s $network -j ACCEPT 2>/dev/null
-    ip6tables -A FORWARD -d $network -j ACCEPT 2>/dev/null
-    ip6tables -A FORWARD -s $network -j ACCEPT 2>/dev/null
+    #ip6tables -A FORWARD -d $network -j ACCEPT 2>/dev/null
+    #ip6tables -A FORWARD -s $network -j ACCEPT 2>/dev/null
     ip6tables -A OUTPUT -d $network -j ACCEPT 2>/dev/null
     [[ -e $route6 ]] &&grep -q "^$network\$" $route6 ||echo "$network" >>$route6
 }
@@ -135,8 +137,8 @@ return_route() { local network="$1" gw="$(ip route |awk '/default/ {print $3}')"
     ip route | grep -q "$network" ||
         ip route add to $network via $gw dev eth0
     iptables -A INPUT -s $network -j ACCEPT
-    iptables -A FORWARD -d $network -j ACCEPT
-    iptables -A FORWARD -s $network -j ACCEPT
+    #iptables -A FORWARD -d $network -j ACCEPT
+    #iptables -A FORWARD -s $network -j ACCEPT
     iptables -A OUTPUT -d $network -j ACCEPT
     [[ -e $route ]] && grep -q "^$network\$" $route || echo "$network" >>$route
 }
@@ -204,17 +206,17 @@ vpn() { local server="$1" user="$2" pass="$3" port="${4:-1194}" proto=${5:-udp}\
 #   protocol) optional protocol (defaults to TCP)
 # Return: configured NAT rule
 vpnportforward() { local port="$1" protocol="${2:-tcp}"
-    ip6tables -t nat -A OUTPUT -i tun0 -p $protocol --dport $port -j DNAT \
-                --to-destination ::11:$port 2>/dev/null
-    ip6tables -A INPUT -p $protocol -m $protocol --dport $port -j ACCEPT \
-                2>/dev/null
-    ip6tables -A FORWARD -i tun0 -p $protocol -m $protocol --dport $port -j \
-                ACCEPT 2>/dev/null
-    iptables -t nat -A OUTPUT -i tun0 -p $protocol --dport $port -j DNAT \
-                --to-destination 127.0.0.11:$port
+    #ip6tables -t nat -A OUTPUT -i tun0 -p $protocol --dport $port -j DNAT \
+    #            --to-destination ::11:$port 2>/dev/null
+    #ip6tables -A INPUT -p $protocol -m $protocol --dport $port -j ACCEPT \
+    #            2>/dev/null
+    #ip6tables -A FORWARD -i tun0 -p $protocol -m $protocol --dport $port -j \
+    #            ACCEPT 2>/dev/null
+    #iptables -t nat -A OUTPUT -i tun0 -p $protocol --dport $port -j DNAT \
+    #            --to-destination 127.0.0.11:$port
     iptables -A INPUT -p $protocol -m $protocol --dport $port -j ACCEPT
-    iptables -A FORWARD -i tun0 -p $protocol -m $protocol --dport $port -j \
-                ACCEPT
+    #iptables -A FORWARD -i tun0 -p $protocol -m $protocol --dport $port -j \
+    #            ACCEPT
     echo "Setup forwarded port: $port $protocol"
 }
 
@@ -270,6 +272,9 @@ conf="$dir/vpn.conf"
 cert="$dir/vpn-ca.crt"
 route="$dir/.firewall"
 route6="$dir/.firewall6"
+# always only use definition from docker-compose.yml
+rm $route
+rm $route6
 [[ -f $conf ]] || { [[ $(ls -d $dir/*|egrep '\.(conf|ovpn)$' 2>&-|wc -w) -eq 1 \
             ]] && conf="$(ls -d $dir/* | egrep '\.(conf|ovpn)$' 2>&-)"; }
 [[ -f $cert ]] || { [[ $(ls -d $dir/* | egrep '\.ce?rt$' 2>&- | wc -w) -eq 1 \
@@ -326,4 +331,6 @@ else
         { echo "ERROR: VPN CA cert missing!"; sleep 120; }
     exec sg vpn -c "openvpn --cd $dir --config $conf ${AUTH_COMMAND:-} \
                ${OTHER_ARGS:-} ${MSS:+--fragment $MSS --mssfix}"
+
+    #while true; do sleep 1000; done
 fi
