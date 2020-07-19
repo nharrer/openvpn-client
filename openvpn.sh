@@ -80,7 +80,7 @@ firewall() { local port="${1:-1194}" docker_network="$(ip -o addr show dev eth0|
     ip6tables -A OUTPUT -o tap+ -j ACCEPT 2>/dev/null
     ip6tables -A OUTPUT -o tun+ -j ACCEPT 2>/dev/null
     #ip6tables -A OUTPUT -d ${docker6_network} -j ACCEPT 2>/dev/null
-    ip6tables -A OUTPUT -o tun+ -p udp -m udp --dport 53 -j ACCEPT 2>/dev/null
+    #ip6tables -A OUTPUT -p udp -m udp --dport 53 -j ACCEPT 2>/dev/null
     ip6tables -A OUTPUT -p tcp -m owner --gid-owner vpn -j ACCEPT 2>/dev/null &&
     ip6tables -A OUTPUT -p udp -m owner --gid-owner vpn -j ACCEPT 2>/dev/null||{
         ip6tables -A OUTPUT -p tcp -m tcp --dport $port -j ACCEPT 2>/dev/null
@@ -92,6 +92,7 @@ firewall() { local port="${1:-1194}" docker_network="$(ip -o addr show dev eth0|
     iptables -P OUTPUT DROP
     iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
     iptables -A INPUT -i lo -j ACCEPT
+    iptables -A INPUT -i eth0 -j ACCEPT
     #iptables -A INPUT -s ${docker_network} -j ACCEPT
     #iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
     #iptables -A FORWARD -i lo -j ACCEPT
@@ -103,7 +104,7 @@ firewall() { local port="${1:-1194}" docker_network="$(ip -o addr show dev eth0|
     iptables -A OUTPUT -o tap+ -j ACCEPT
     iptables -A OUTPUT -o tun+ -j ACCEPT
     #iptables -A OUTPUT -d ${docker_network} -j ACCEPT
-    iptables -A OUTPUT -o tun+ -p udp -m udp --dport 53 -j ACCEPT
+    #iptables -A OUTPUT -p udp -m udp --dport 53 -j ACCEPT
     iptables -A OUTPUT -p tcp -m owner --gid-owner vpn -j ACCEPT 2>/dev/null &&
     iptables -A OUTPUT -p udp -m owner --gid-owner vpn -j ACCEPT || {
         iptables -A OUTPUT -p tcp -m tcp --dport $port -j ACCEPT
@@ -122,10 +123,10 @@ return_route6() { local network="$1" gw="$(ip -6 route |
                 awk '/default/{print $3}')"
     ip -6 route | grep -q "$network" ||
         ip -6 route add to $network via $gw dev eth0
-    ip6tables -A INPUT -s $network -j ACCEPT 2>/dev/null
+    #ip6tables -A INPUT -s $network -j ACCEPT 2>/dev/null
     #ip6tables -A FORWARD -d $network -j ACCEPT 2>/dev/null
     #ip6tables -A FORWARD -s $network -j ACCEPT 2>/dev/null
-    ip6tables -A OUTPUT -d $network -j ACCEPT 2>/dev/null
+    #ip6tables -A OUTPUT -d $network -j ACCEPT 2>/dev/null
     [[ -e $route6 ]] &&grep -q "^$network\$" $route6 ||echo "$network" >>$route6
 }
 
@@ -136,10 +137,10 @@ return_route6() { local network="$1" gw="$(ip -6 route |
 return_route() { local network="$1" gw="$(ip route |awk '/default/ {print $3}')"
     ip route | grep -q "$network" ||
         ip route add to $network via $gw dev eth0
-    iptables -A INPUT -s $network -j ACCEPT
+    #iptables -A INPUT -s $network -j ACCEPT
     #iptables -A FORWARD -d $network -j ACCEPT
     #iptables -A FORWARD -s $network -j ACCEPT
-    iptables -A OUTPUT -d $network -j ACCEPT
+    #iptables -A OUTPUT -d $network -j ACCEPT
     [[ -e $route ]] && grep -q "^$network\$" $route || echo "$network" >>$route
 }
 
@@ -273,8 +274,8 @@ cert="$dir/vpn-ca.crt"
 route="$dir/.firewall"
 route6="$dir/.firewall6"
 # always only use definition from docker-compose.yml
-rm $route
-rm $route6
+rm $route 2> /dev/null
+rm $route6 2> /dev/null
 [[ -f $conf ]] || { [[ $(ls -d $dir/*|egrep '\.(conf|ovpn)$' 2>&-|wc -w) -eq 1 \
             ]] && conf="$(ls -d $dir/* | egrep '\.(conf|ovpn)$' 2>&-)"; }
 [[ -f $cert ]] || { [[ $(ls -d $dir/* | egrep '\.ce?rt$' 2>&- | wc -w) -eq 1 \
@@ -316,6 +317,18 @@ while getopts ":hc:df:a:m:o:p:R:r:v:" opt; do
 done
 shift $(( OPTIND - 1 ))
 
+# needs echo 1 > /proc/sys/net/netfilter/nf_log_all_netns
+# !! only turn on /proc/sys/net/netfilter/nf_log_all_netns while debugging
+#iptables -N LOGGING
+#iptables -A LOGGING -j LOG --log-prefix "IPTables-Dropped: " --log-level 4
+#iptables -A LOGGING -j DROP 
+#iptables -A INPUT -j LOGGING
+#iptables -A FORWARD -j LOGGING
+#iptables -A OUTPUT -j LOGGING
+
+# enable this line, to startup without starting openvpn
+#while true; do sleep 1000; done
+
 if [[ $# -ge 1 && -x $(which $1 2>&-) ]]; then
     exec "$@"
 elif [[ $# -ge 1 ]]; then
@@ -331,6 +344,4 @@ else
         { echo "ERROR: VPN CA cert missing!"; sleep 120; }
     exec sg vpn -c "openvpn --cd $dir --config $conf ${AUTH_COMMAND:-} \
                ${OTHER_ARGS:-} ${MSS:+--fragment $MSS --mssfix}"
-
-    #while true; do sleep 1000; done
 fi
