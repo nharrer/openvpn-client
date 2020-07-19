@@ -92,11 +92,7 @@ Running the following on your docker host should give you the correct network:
                 -v /some/path:/vpn -d dperson/openvpn-client \
                 -r 192.168.1.0/24 -v 'vpn.server.name;username;password'
 
-**NOTE**: if you don't use the `-v` to configure your VPN, then you'll have to
-make sure that `redirect-gateway def1` is set, otherwise routing may not work.
-Or you could use -o option to pass it : `-o '--redirect-gateway def1'`
-
-**NOTE 2**: if you have a port you want to make available, you have to add the
+**NOTE**: if you have a port you want to make available, you have to add the
 docker `-p` option to the VPN container. The network stack will be reused by
 the second container (that's what `--net=container:vpn` does).
 
@@ -111,6 +107,7 @@ the second container (that's what `--net=container:vpn` does).
                     required arg: '<passwd>'
                     <passwd> password to access the certificate file
         -a '<user;password>' Configure authentication username and password
+        -D          Don't use the connection as the default route
         -d          Use the VPN provider's DNS resolvers
         -f '[port]' Firewall rules so that only the VPN and DNS are allowed to
                     send internet traffic (IE if VPN is down it's offline)
@@ -145,6 +142,7 @@ ENVIRONMENT VARIABLES
 
  * `CERT_AUTH` - As above (-c) provide authentication to access certificate
  * `DNS` - As above (-d) use the VPN provider's DNS resolvers
+ * `DEFAULT_GATEWAY` - As above (-D) if set to 'false', don't use default route
  * `FIREWALL` - As above (-f) setup firewall to disallow net access w/o the VPN
  * `CIPHER` - Set openvpn cipher option when generating conf file with -v
  * `AUTH` - Set openvpn auth option when generating conf file with -v
@@ -153,6 +151,7 @@ ENVIRONMENT VARIABLES
  * `ROUTE6` - As above (-R) add a route to allow replies to your private network
  * `ROUTE` - As above (-r) add a route to allow replies to your private network
  * `TZ` - Set a timezone, IE `EST5EDT`
+ * `VPN_FILES` - specify the '<corfig>[;cert]' files to use (relative to `/vpn`)
  * `VPN` - As above (-v) setup a VPN connection
  * `VPN_AUTH` - As above (-a) provide authentication to vpn server
  * `VPNPORT` - As above (-p) setup port forwarding (See NOTE below)
@@ -160,6 +159,10 @@ ENVIRONMENT VARIABLES
 
  **NOTE**: optionally supports additional variables starting with the same name,
  IE `VPNPORT` also will work for `VPNPORT_2`, `VPNPORT_3`... `VPNPORT_x`, etc.
+
+ **NOTE2**: if you are using `-d` or `DNS` and set the container as read-only,
+you will get errors as it tries to write to `/etc/resolv.conf`, the 2 are
+incompatible.
 
 ## Examples
 
@@ -175,7 +178,16 @@ Any of the commands can be run at creation with `docker run` or later with
 
 ### VPN configuration
 
-**NOTE**: When using `-v` a vpn configuration is generated.
+**NOTE**: When using `-v` (`VPN` variable) a vpn configuration is generated.
+
+**NOTE2**: See the `-a` (`VPN_AUTH` variable) to just provide user / password
+authentication to an existing configuration.
+
+**NOTE3**: If the auto detect isn't picking the correct configuration, you can
+use the `VPN_FILES` environment variable. All files must still be in `/vpn`, and
+will only be looked for there. IE, you could use the following to specify the
+`vpn.conf` configuration and `vpn.crt` certificate files:
+`-e VPN_FILES="vpn.conf;vpn.crt`
 
 In order to work you must provide VPN configuration and the certificate. You can
 use external storage for `/vpn`:
@@ -245,7 +257,7 @@ The vpn.conf should look like this:
 
 ### Run with openvpn client configuration and provided auth
 
-In case you want to use your client configuration in /vpn named vpn.conf 
+In case you want to use your client configuration in /vpn named vpn.conf
 but adding your vpn user and password by command line
 
     sudo docker run -it --cap-add=NET_ADMIN --device /dev/net/tun --name vpn \

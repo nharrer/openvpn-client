@@ -13,7 +13,7 @@ COPY openvpn.sh /usr/bin/
 COPY bashrc /root/.bashrc
 
 HEALTHCHECK --interval=60s --timeout=15s --start-period=120s \
-             CMD curl -L 'https://api.ipify.org'
+             CMD curl -LSs 'https://api.ipify.org'
 
 VOLUME ["/vpn"]
 
